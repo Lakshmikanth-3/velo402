@@ -23,7 +23,9 @@ const SEAL_POLICY_PKG = process.env.NEXT_PUBLIC_VELO402_SEAL_POLICY_PKG ?? "";
 
 // In production, blob IDs are registered on-chain or in a simple registry.
 // This map will be populated at server startup / by encrypt-and-publish-dataset.ts
-const BLOB_REGISTRY: Record<string, string> = {};
+const BLOB_REGISTRY: Record<string, string> = {
+  '8a94f8b68beb44e0b11ce0d1a55a2562': '0ASL-ixcZvbJWKewRMuyweYEJ_4W5uRbKdz8eSVvIGM',
+};
 
 export async function GET(req: NextRequest) {
   const digest = req.headers.get("x-velo402-payment-digest");

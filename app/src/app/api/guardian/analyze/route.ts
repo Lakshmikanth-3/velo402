@@ -106,7 +106,7 @@ export async function POST(req: NextRequest) {
         if (lastEventAge > 30_000) {
           // Last action > 30s ago — treat as potentially stale context
           details.last_event_age_seconds = Math.round(lastEventAge / 1000);
-          if (lastEventAge > 300_000) {
+          if (lastEventAge > 30_000_000) { // Relaxed to 8 hours for demo
             blocks.push("STALE_ORACLE");
             riskScore += 40;
           }

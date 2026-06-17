@@ -39,7 +39,12 @@ async function main() {
   const { secretKey } = decodeSuiPrivateKey(process.env.AGENT_PRIVATE_KEY!);
   const operatorKeypair = Ed25519Keypair.fromSecretKey(secretKey);
 
-  const walrusClient = new WalrusClient({ network: NETWORK, suiClient });
+  const walrusClient = new WalrusClient({ 
+    network: NETWORK, 
+    suiClient,
+    publisherUrl: "https://publisher.walrus-testnet.walrus.space",
+    aggregatorUrl: "https://aggregator.walrus-testnet.walrus.space"
+  });
   const sealClient = new SealClient({
     suiClient,
     serverConfigs: [
