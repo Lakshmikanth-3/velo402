@@ -64,12 +64,29 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  // ── Step 2: Verify payment on-chain (no Supabase in security path) ────────
   try {
-    const tx = await suiClient.waitForTransaction({
-      digest,
-      options: { showEvents: true },
-    });
+    let tx;
+    let lastErr;
+    // Retry loop with exponential backoff to handle RPC indexing delays
+    for (let i = 0; i < 4; i++) {
+      try {
+        tx = await suiClient.waitForTransaction({
+          digest,
+          options: { showEvents: true },
+          timeout: 3000, // 3 second timeout per attempt
+        });
+        break; // Success
+      } catch (err) {
+        lastErr = err;
+        if (i < 3) {
+          await new Promise((r) => setTimeout(r, 500 * Math.pow(2, i))); // Wait 500ms, 1s, 2s
+        }
+      }
+    }
+
+    if (!tx) {
+      throw lastErr || new Error("Transaction could not be verified after retries.");
+    }
 
     // action_type is emitted as vector<u8> in Move; the RPC may return it as
     // an array of byte numbers OR as a pre-decoded string depending on SDK version.

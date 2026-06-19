@@ -134,7 +134,7 @@ All objects below are live and verifiable on the Sui Testnet Explorer (`testnet.
 |---|---|---|
 | **Package** | `0xad3b5de5af6591f89fb45b351ef760824d9247d3402d948d361a35dbfc2b7dd1` | [SuiVision](https://testnet.suivision.xyz/package/0xad3b5de5af6591f89fb45b351ef760824d9247d3402d948d361a35dbfc2b7dd1) |
 | **Treasury** (Shared) | `0x2658c38c331de4fda89c1ec7c6f79f7438f5be70083c64e3103f1bfa537b67e9` | [SuiVision](https://testnet.suivision.xyz/object/0x2658c38c331de4fda89c1ec7c6f79f7438f5be70083c64e3103f1bfa537b67e9) |
-| **PolicyCap** (Agent-Owned) | `0x0c5f9c67ac5f2d4f56ceb99a983fdc40ac1b889c1d9dd30f1b26c025d0a50877` | [SuiVision](https://testnet.suivision.xyz/object/0x0c5f9c67ac5f2d4f56ceb99a983fdc40ac1b889c1d9dd30f1b26c025d0a50877) |
+| **PolicyCap** (Agent-Owned) | `0x916d9636e30b2a6ea1bcb7974257e9c6d4fa2c39d1e4813fe1b48cfaf0f0c88c` | [SuiVision](https://testnet.suivision.xyz/object/0x916d9636e30b2a6ea1bcb7974257e9c6d4fa2c39d1e4813fe1b48cfaf0f0c88c) |
 | **PaymentRegistry** (Shared) | `0x1291de3b418e8eeac7356d6c306c5c9bc68009761cf6e5e784223eb07fec7ba5` | [SuiVision](https://testnet.suivision.xyz/object/0x1291de3b418e8eeac7356d6c306c5c9bc68009761cf6e5e784223eb07fec7ba5) |
 | **UpgradeCap** | `0xbfe0cc9fc1ddfdb8f804e33917d0d08ccbbf7337daaf1f9cfffc6d11a8c8802a` | — |
 | **Agent Address** | `0x7bf9e57f4f1168be90dd8a367b09911282d3af5030d2dc1281368d168a048bb9` | — |
@@ -262,7 +262,7 @@ All objects below are live and verifiable on the Sui Testnet Explorer (`testnet.
 NEXT_PUBLIC_SUI_NETWORK=testnet
 NEXT_PUBLIC_VELO402_PACKAGE_ID=0xad3b5de5af6591f89fb45b351ef760824d9247d3402d948d361a35dbfc2b7dd1
 NEXT_PUBLIC_TREASURY_ID=0x2658c38c331de4fda89c1ec7c6f79f7438f5be70083c64e3103f1bfa537b67e9
-NEXT_PUBLIC_POLICY_CAP_ID=0x0c5f9c67ac5f2d4f56ceb99a983fdc40ac1b889c1d9dd30f1b26c025d0a50877
+NEXT_PUBLIC_POLICY_CAP_ID=0x916d9636e30b2a6ea1bcb7974257e9c6d4fa2c39d1e4813fe1b48cfaf0f0c88c
 NEXT_PUBLIC_PAYMENT_REGISTRY_ID=0x1291de3b418e8eeac7356d6c306c5c9bc68009761cf6e5e784223eb07fec7ba5
 NEXT_PUBLIC_VELO402_SEAL_POLICY_PKG=0xad3b5de5af6591f89fb45b351ef760824d9247d3402d948d361a35dbfc2b7dd1
 EXPECTED_PCR0="e2a8c3d9b4f71a6e0d2b8c5f3a9e4d1b7c0f6a2..."  # SHA-384 PCR0 hash
