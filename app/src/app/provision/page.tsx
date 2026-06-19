@@ -33,6 +33,33 @@ const SCOPE_LIST = [
   },
 ];
 
+interface IntentPreview {
+  ok: boolean;
+  original_text: string;
+  parsed_intent: {
+    action: string;
+    scope_tag: number;
+    amount_sui: number;
+    rationale: string;
+  };
+  preview: {
+    action: string;
+    venue: string;
+    cost_breakdown: string;
+    budget_impact: string;
+    risk_summary: string;
+    guardian_summary: string;
+    can_execute: boolean;
+  };
+  guardian: {
+    risk_level: string;
+    blocks: string[];
+    warnings: string[];
+  };
+  error?: string;
+  message?: string;
+}
+
 export default function ProvisionPage() {
   const [budget, setBudget] = useState(1);
   const [expiryDays, setExpiryDays] = useState(1);
@@ -50,6 +77,43 @@ export default function ProvisionPage() {
   } | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // ── Intent parser state ──────────────────────────────────────────────────
+  const [intentText, setIntentText] = useState("");
+  const [intentParsing, setIntentParsing] = useState(false);
+  const [intentPreview, setIntentPreview] = useState<IntentPreview | null>(null);
+  const [intentErr, setIntentErr] = useState("");
+
+  const handleParseIntent = async () => {
+    if (!intentText.trim()) return;
+    setIntentParsing(true);
+    setIntentPreview(null);
+    setIntentErr("");
+    try {
+      const res = await fetch("/api/intent/parse", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: intentText }),
+      });
+      const data: IntentPreview = await res.json();
+      if (!res.ok || data.error) {
+        setIntentErr(data.message ?? data.error ?? "Parse failed");
+      } else {
+        setIntentPreview(data);
+        // Auto-populate form fields from parsed intent
+        if (data.parsed_intent.amount_sui > 0) {
+          setBudget(Math.min(50, Math.max(0.01, data.parsed_intent.amount_sui)));
+        }
+        if (data.parsed_intent.scope_tag && !scopes.includes(data.parsed_intent.scope_tag)) {
+          setScopes((prev) => [...prev, data.parsed_intent.scope_tag]);
+        }
+      }
+    } catch (e) {
+      setIntentErr(String(e));
+    } finally {
+      setIntentParsing(false);
+    }
+  };
 
   const expirationEpoch = currentEpoch + expiryDays;
 
@@ -109,6 +173,87 @@ export default function ProvisionPage() {
           with a spend ceiling, expiry, and allowed protocol scope. Sign once —
           the agent operates autonomously within these bounds until you revoke.
         </p>
+      </div>
+
+      {/* ── Intent Parser Box ── */}
+      <div
+        className="glass-panel edge-light fade-up-2"
+        style={{ borderRadius: "16px", padding: "1.5rem", marginBottom: "1rem" }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.75rem" }}>
+          <span className="material-symbols-outlined" style={{ fontSize: "18px", color: "var(--secondary)" }}>
+            auto_fix_high
+          </span>
+          <span style={{ fontSize: "0.875rem", fontWeight: 700 }}>
+            Plain-English Intent Parser
+          </span>
+          <span className="badge badge-teal" style={{ marginLeft: "auto" }}>Guardian pre-flight included</span>
+        </div>
+        <p style={{ fontSize: "0.78rem", color: "var(--on-surface-variant)", marginBottom: "0.75rem" }}>
+          Describe what you want the agent to do. The intent is parsed, Guardian-checked, and the mandate form is pre-filled.
+        </p>
+        <div style={{ display: "flex", gap: "0.75rem", alignItems: "flex-start" }}>
+          <textarea
+            id="intentInput"
+            className="input"
+            placeholder='e.g. "Let this agent buy sentiment data and place small Predict bets, capped at 2 SUI, for 7 days"'
+            value={intentText}
+            onChange={(e) => setIntentText(e.target.value)}
+            style={{ resize: "vertical", minHeight: "60px", flex: 1, fontFamily: "inherit" }}
+            onKeyDown={(e) => { if (e.key === "Enter" && e.metaKey) handleParseIntent(); }}
+          />
+          <button
+            id="parseIntentBtn"
+            className="btn btn-primary"
+            onClick={handleParseIntent}
+            disabled={intentParsing || !intentText.trim()}
+            style={{ flexShrink: 0, alignSelf: "flex-start" }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: "18px" }}>
+              {intentParsing ? "hourglass_top" : "send"}
+            </span>
+            {intentParsing ? "Parsing…" : "Parse"}
+          </button>
+        </div>
+
+        {intentErr && (
+          <div style={{ marginTop: "0.75rem", padding: "0.6rem 0.9rem", borderRadius: "8px", background: "rgba(147,0,10,0.08)", border: "1px solid rgba(255,180,171,0.2)", color: "var(--error)", fontSize: "0.8rem", fontFamily: "monospace" }}>
+            ✗ {intentErr}
+          </div>
+        )}
+
+        {intentPreview && (
+          <div style={{ marginTop: "0.75rem", padding: "1rem", borderRadius: "10px", background: "rgba(161,212,148,0.04)", border: "1px solid rgba(161,212,148,0.15)", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.25rem" }}>
+              <span
+                className={`badge ${intentPreview.guardian.blocks.length ? "badge-red" : intentPreview.guardian.warnings.length ? "badge-amber" : "badge-green"}`}
+              >
+                Guardian: {intentPreview.guardian.risk_level}
+              </span>
+              {intentPreview.guardian.blocks.map((b) => (
+                <span key={b} className="badge badge-red">{b}</span>
+              ))}
+              {intentPreview.guardian.warnings.map((w) => (
+                <span key={w} className="badge badge-amber">{w}</span>
+              ))}
+            </div>
+            {[
+              ["Action", intentPreview.preview.action],
+              ["Venue", intentPreview.preview.venue],
+              ["Cost", intentPreview.preview.cost_breakdown],
+              ["Budget Impact", intentPreview.preview.budget_impact],
+              ["Guardian", intentPreview.preview.guardian_summary],
+            ].map(([k, v]) => (
+              <div key={k} style={{ display: "flex", gap: "0.5rem", fontSize: "0.78rem" }}>
+                <span style={{ color: "var(--outline)", width: "90px", flexShrink: 0 }}>{k}</span>
+                <span style={{ color: "var(--on-surface)" }}>{v}</span>
+              </div>
+            ))}
+            <div style={{ fontSize: "0.72rem", color: "var(--outline)", marginTop: "0.25rem" }}>
+              ✓ Form pre-filled from parsed intent. Adjust sliders as needed, then build the policy.
+            </div>
+          </div>
+        )}
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: "1rem", alignItems: "start" }}>
