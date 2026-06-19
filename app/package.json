@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "agent:run": "tsx agent/agent-runner.ts",
-    "encrypt:dataset": "tsx scripts/encrypt-and-publish-dataset.ts"
+    "encrypt:dataset": "tsx scripts/encrypt-and-publish-dataset.ts",
+    "start:agent": "tsx --env-file=.env agent/agent-runner.ts"
   },
   "dependencies": {
     "@mysten/deepbook-v3": "1.5.0",

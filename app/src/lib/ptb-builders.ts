@@ -93,19 +93,33 @@ export function buildRevokePolicyTx({
 export function buildPay402Tx({
   amountMist,
   recipient,
+  nonce,
+  nautilusAttestationHash,
 }: {
   amountMist: bigint;
   recipient: string;
+  nonce: string;
+  nautilusAttestationHash: Uint8Array;
 }): Transaction {
   const tx = new Transaction();
+
+  // The process.env reference here ensures it uses the registry from .env
+  const PAYMENT_REGISTRY_ID = process.env.NEXT_PUBLIC_PAYMENT_REGISTRY_ID;
+  if (!PAYMENT_REGISTRY_ID) {
+    throw new Error("NEXT_PUBLIC_PAYMENT_REGISTRY_ID is not set in .env — run scripts/create-payment-registry.ts first");
+  }
 
   tx.moveCall({
     target: `${PACKAGE_ID}::velo_wallet::pay_402_invoice`,
     arguments: [
       tx.object(POLICY_CAP_ID),
       tx.object(TREASURY_ID),
+      tx.object(PAYMENT_REGISTRY_ID),
+      tx.pure.string(nonce),
       tx.pure.u64(amountMist),
+      tx.pure(bcs_encode_u8_vec(Array.from(nautilusAttestationHash))),
       tx.pure.address(recipient),
+      tx.object("0x6"), // Sui Clock
     ],
   });
 
@@ -144,13 +158,18 @@ export function buildDeepbookSpotTx({
 export function buildDeepbookAdvancedTx({
   amountMist,
   scopeTag,
-  deepbookBalanceManager,
+  deepbookMarginPoolId,
+  deepbookPredictPoolId,
 }: {
   amountMist: bigint;
   scopeTag: 3 | 4;
-  deepbookBalanceManager: string;
+  deepbookMarginPoolId: string;
+  deepbookPredictPoolId: string;
 }): Transaction {
   const tx = new Transaction();
+
+  // Route to the correct DeepBook Pool
+  const poolId = scopeTag === 3 ? deepbookMarginPoolId : deepbookPredictPoolId;
 
   tx.moveCall({
     target: `${PACKAGE_ID}::velo_wallet::pay_deepbook_advanced`,
@@ -159,7 +178,7 @@ export function buildDeepbookAdvancedTx({
       tx.object(TREASURY_ID),
       tx.pure.u64(amountMist),
       tx.pure.u8(scopeTag),
-      tx.pure.address(deepbookBalanceManager),
+      tx.object(poolId), // Real pool ID implementation
     ],
   });
 

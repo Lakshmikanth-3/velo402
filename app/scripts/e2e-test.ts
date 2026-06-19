@@ -81,14 +81,24 @@ async function main() {
 
   // ── Step 3: Build + sign pay_402_invoice PTB ─────────────────────────────────
   step(3, "Agent signs & submits pay_402_invoice PTB");
+  const PAYMENT_REGISTRY_ID = process.env.NEXT_PUBLIC_PAYMENT_REGISTRY_ID;
+  if (!PAYMENT_REGISTRY_ID) throw new Error("NEXT_PUBLIC_PAYMENT_REGISTRY_ID not set in .env");
+  const pcr0Hex = process.env.EXPECTED_PCR0?.replace(/"/g, "");
+  if (!pcr0Hex || pcr0Hex.length < 96) throw new Error("EXPECTED_PCR0 not set or invalid in .env");
+  const pcr0Bytes = new Uint8Array(pcr0Hex.match(/.{1,2}/g)!.map((b) => parseInt(b, 16)));
+
   const tx = new Transaction();
   tx.moveCall({
     target: `${PACKAGE_ID}::velo_wallet::pay_402_invoice`,
     arguments: [
       tx.object(POLICY_ID),
       tx.object(TREASURY_ID),
+      tx.object(PAYMENT_REGISTRY_ID),
+      tx.pure.string(challenge.request_hash),
       tx.pure.u64(BigInt(challenge.amount_mist)),
+      tx.pure(pcr0Bytes), // Nautilus attestation hash (Uint8Array)
       tx.pure.address(keypair.toSuiAddress()), // paying to self for demo
+      tx.object('0x6'), // Clock
     ],
   });
 

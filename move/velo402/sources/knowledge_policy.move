@@ -25,14 +25,9 @@ module velo402::knowledge_policy {
     /// this function acts as the *on-chain policy check* they dry-run.
     public fun seal_approve(
         id: vector<u8>,
-        // The digest bytes of the settling transaction, encoded as vector<u8>
-        _payment_tx_digest: vector<u8>,
+        registry: &velo402::payment_kit::PaymentRegistry,
     ) {
-        // In production this would read a PaymentRegistry shared object whose
-        // records are written by pay_402_invoice.  For the hackathon prototype
-        // the key servers rely on their own RPC lookup of AgentActionEvent logs
-        // and use this function only to signal policy *shape* to Seal's SDK.
-        assert!(vector::length(&id) > 0, ENoAccess);
-        // Passes — key server proceeds to co-sign the decryption key share.
+        let nonce_str = std::string::utf8(id);
+        assert!(velo402::payment_kit::has_settled_nonce(registry, nonce_str), ENoAccess);
     }
 }

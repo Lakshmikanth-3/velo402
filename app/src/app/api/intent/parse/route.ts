@@ -119,9 +119,9 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Step 2: Validate & enrich ─────────────────────────────────────────────
-    const amountSui = Number(parsed.amount_sui ?? 0);
+    amountSui = Number(parsed.amount_sui ?? 0);
     const amountMist = Math.round(amountSui * 1e9);
-    const scopeTag = Number(parsed.scope_tag ?? 2);
+    scopeTag = Number(parsed.scope_tag ?? 2);
 
     if (amountMist <= 0) {
       return NextResponse.json(
@@ -165,22 +165,38 @@ export async function POST(req: NextRequest) {
       try {
         if (scopeTag === SCOPE.DATA_402) {
           const treasuryId = process.env.NEXT_PUBLIC_TREASURY_ID ?? "";
+          const pcr0Hex = process.env.EXPECTED_PCR0?.replace(/"/g, "");
+          if (!pcr0Hex || pcr0Hex.length < 96) {
+            throw new Error("EXPECTED_PCR0 is not set or invalid in .env. Cannot build attested PTB.");
+          }
+          const pcr0Bytes = new Uint8Array(
+            pcr0Hex.match(/.{1,2}/g)!.map((b) => parseInt(b, 16))
+          );
+
           tx = buildPay402Tx({
             amountMist: BigInt(amountMist),
             recipient: treasuryId,
+            nonce: crypto.randomUUID(),
+            nautilusAttestationHash: pcr0Bytes,
           });
         } else if (scopeTag === SCOPE.DEEPBOOK_SPOT) {
+          const spotPoolId = process.env.NEXT_PUBLIC_DEEPBOOK_SPOT_POOL_ID;
+          if (!spotPoolId) throw new Error("NEXT_PUBLIC_DEEPBOOK_SPOT_POOL_ID not set in .env");
           tx = buildDeepbookSpotTx({
             amountMist: BigInt(amountMist),
-            deepbookBalanceManager:
-              process.env.NEXT_PUBLIC_DEEPBOOK_POOL_ID ?? "0x0",
+            deepbookBalanceManager: spotPoolId,
           });
         } else {
+          const marginPoolId = process.env.NEXT_PUBLIC_DEEPBOOK_MARGIN_POOL_ID;
+          const predictPoolId = process.env.NEXT_PUBLIC_DEEPBOOK_PREDICT_POOL_ID;
+          if (!marginPoolId || !predictPoolId) {
+            throw new Error("NEXT_PUBLIC_DEEPBOOK_MARGIN_POOL_ID / PREDICT_POOL_ID not set in .env — awaiting Mysten Labs pool deployment");
+          }
           tx = buildDeepbookAdvancedTx({
             amountMist: BigInt(amountMist),
             scopeTag: scopeTag as 3 | 4,
-            deepbookBalanceManager:
-              process.env.NEXT_PUBLIC_DEEPBOOK_POOL_ID ?? "0x0",
+            deepbookMarginPoolId: marginPoolId,
+            deepbookPredictPoolId: predictPoolId,
           });
         }
         const bytes = await tx.build({ client: suiClient });

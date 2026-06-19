@@ -22,9 +22,19 @@ const PACKAGE_ID = process.env.NEXT_PUBLIC_VELO402_PACKAGE_ID ?? "";
 const SEAL_POLICY_PKG = process.env.NEXT_PUBLIC_VELO402_SEAL_POLICY_PKG ?? "";
 
 // In production, blob IDs are registered on-chain or in a simple registry.
-// This map will be populated at server startup / by encrypt-and-publish-dataset.ts
+// This map is populated by running: npx tsx --env-file=.env scripts/encrypt-and-publish-dataset.ts
 const BLOB_REGISTRY: Record<string, string> = {
-  '8a94f8b68beb44e0b11ce0d1a55a2562': '0ASL-ixcZvbJWKewRMuyweYEJ_4W5uRbKdz8eSVvIGM',
+  // Real Pyth SUI/USD oracle data blob ($0.7146, published 2026-06-18)
+  // Encrypted via Seal, stored on Walrus, fetched from Pyth Hermes v2
+  '2937619863294903a271d5200e204edb': '_SBjvQk91_1Q71Zgp5R_pt72rqE5iDjP5kGioBTRkiQ',
+  // New Pyth SUI/USD oracle data ($0.7166, published 2026-06-19)
+  '5ba6b465bfd14563ad26912cb7d2a9e8': 'VeoqzfgEVAYgolDB3Nan9jRuaEDj89uvT3U0Y1xDkLA',
+  '715ad19620b2497aad16ad14cfd1facb': 'rY10S_BsvLJmi1b3U7Vz5rgP8ztBw-48UvaiNn6oGPc',
+  '98057c34a3754348857108cad24074cb': 'fIxsTCPXAQta_GQcZWf3f6gnx5VIZaYDYZCEvHLh-24',
+  'd7b2cd10ac4944a2b4605dc73cf7a416': '3Oay8QaMMlP3GcJY9wBbe--_m8mBsUWlxWcbzo6FCWw',
+  'c15e952c8c674e63917c3bd832775ccf': 'jNf9ZVFAC5mAIlfR5YpUEtv2LVtPqelOZYlBqgeetQ0',
+  '44237d02b58d4c3da950aabccccbc046': '0gxslZsXqo9-QJ9THgMj3F8IHy7JMH__o3zFRu8IIVo',
+  '4cf483114f01493ca5c45ffce0b90bf1': 'DVJMnRsaHhLP5QpmxPfabKAV5KUOedF2hiY-aMa_PKM',
 };
 
 export async function GET(req: NextRequest) {
@@ -33,7 +43,13 @@ export async function GET(req: NextRequest) {
 
   // ── Step 1: No payment credentials → issue 402 challenge ─────────────────
   if (!digest || !requestHash) {
-    const nonce = crypto.randomUUID().replace(/-/g, "");
+    // Pick a valid, available blob/hash pair from the registry
+    const availableHashes = Object.keys(BLOB_REGISTRY);
+    if (availableHashes.length === 0) {
+      return NextResponse.json({ error: "No datasets available" }, { status: 503 });
+    }
+    // Issue the challenge for the most recently published real blob
+    const nonce = availableHashes[availableHashes.length - 1];
     return NextResponse.json(
       {
         error: "Payment Required",
@@ -50,7 +66,7 @@ export async function GET(req: NextRequest) {
 
   // ── Step 2: Verify payment on-chain (no Supabase in security path) ────────
   try {
-    const tx = await suiClient.getTransactionBlock({
+    const tx = await suiClient.waitForTransaction({
       digest,
       options: { showEvents: true },
     });
@@ -85,7 +101,7 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // ── Step 3: Return Walrus blob reference + Seal policy for decryption ────
+    // ── Step 3: Return real Walrus blob reference + Seal policy for decryption ────
     const blobId = BLOB_REGISTRY[requestHash] ?? null;
 
     return NextResponse.json({

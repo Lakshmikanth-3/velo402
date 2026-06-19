@@ -13,7 +13,8 @@
  *
  * No human signature is required at any step after initial provisioning.
  */
-import { SuiJsonRpcClient, getJsonRpcFullnodeUrl } from '@mysten/sui/jsonRpc';
+import { getJsonRpcFullnodeUrl, SuiJsonRpcClient } from '@mysten/sui/jsonRpc';
+import { Transaction } from '@mysten/sui/transactions';
 import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
 import { decodeSuiPrivateKey } from '@mysten/sui/cryptography';
 import { WalrusClient } from '@mysten/walrus';
@@ -21,13 +22,16 @@ import { SealClient, SessionKey } from '@mysten/seal';
 import { DeepBookClient } from '@mysten/deepbook-v3';
 import { buildPay402Tx, buildDeepbookSpotTx, buildDeepbookAdvancedTx } from '../src/lib/ptb-builders';
 
+
 // ─── Config ──────────────────────────────────────────────────────────────────
 const NETWORK = (process.env.NEXT_PUBLIC_SUI_NETWORK as 'testnet' | 'mainnet') ?? 'testnet';
 const KNOWLEDGE_API = process.env.KNOWLEDGE_API_URL ?? 'http://localhost:3000/api/knowledge/sentiment';
 const PACKAGE_ID    = process.env.NEXT_PUBLIC_VELO402_PACKAGE_ID!;
 const TREASURY_ID   = process.env.NEXT_PUBLIC_TREASURY_ID!;
 const POLICY_CAP_ID = process.env.NEXT_PUBLIC_POLICY_CAP_ID!;
-const DEEPBOOK_POOL = process.env.NEXT_PUBLIC_DEEPBOOK_POOL_ID ?? '';
+const DEEPBOOK_SPOT_POOL  = process.env.NEXT_PUBLIC_DEEPBOOK_SPOT_POOL_ID   ?? '0x1c19362ca52b8ffd7a33cee805a67d40f31e6ba303753fd3a4cfdfacea7163a5';
+const DEEPBOOK_MARGIN_POOL = process.env.NEXT_PUBLIC_DEEPBOOK_MARGIN_POOL_ID ?? '0x48c95963e9eac37a316b7ae04a0deb761bcdcc2b67912374d6036e7f0e9bae9f';
+const DEEPBOOK_PREDICT_POOL = process.env.NEXT_PUBLIC_DEEPBOOK_PREDICT_POOL_ID ?? '0x8c1c1b186c4fddab1ebd53e0895a36c1d1b3b9a77cd34e607bef49a38af0150a';
 
 const POLL_INTERVAL_MS = 15_000; // 15 s between agent cycles
 
@@ -44,8 +48,17 @@ const walrusClient = new WalrusClient({
 
 const sealClient = new SealClient({
   suiClient,
-  serverConfigs: [], // Provide server configs in production
-  verifyKeyServers: false, // set true in production
+  serverConfigs: [
+    {
+      objectId: "0x73d05d62c18d9374e3ea529e8e0ed6161da1a141a94d3f76ae3fe4e99356db75",
+      weight: 1,
+    },
+    {
+      objectId: "0xf5d14a81a982144ae441cd7d64b09027f116a468bd36e7eca494f750591623c8",
+      weight: 1,
+    },
+  ],
+  verifyKeyServers: true, // testnet
 });
 
 const deepbookClient = new DeepBookClient({
@@ -61,14 +74,10 @@ async function runAgentLoop() {
   log(`Network : ${NETWORK}`);
   log(`Package : ${PACKAGE_ID}`);
 
-  while (true) {
-    try {
-      await agentCycle();
-    } catch (err) {
-      log(`[CYCLE ERROR] ${err}`);
-    }
-    await sleep(POLL_INTERVAL_MS);
-  }
+  // Run one cycle
+  await agentCycle();
+  log(`[AGENT] Cycle completed. Exiting.`);
+  process.exit(0);
 }
 
 async function agentCycle() {
@@ -127,9 +136,18 @@ async function fetch402Challenge(): Promise<{
 }
 
 // ─── Step 2 ──────────────────────────────────────────────────────────────────
-async function pay402Invoice(amountMist: bigint, _requestHash: string): Promise<string | null> {
+async function pay402Invoice(amountMist: bigint, requestHash: string): Promise<string | null> {
   log(`[AGENT] Building pay_402_invoice PTB for ${amountMist} MIST…`);
-  const tx = buildPay402Tx({ amountMist, recipient: TREASURY_ID });
+  const pcr0Hex = (process.env.EXPECTED_PCR0 ?? '').replace(/"/g, '');
+  const pcr0Bytes = pcr0Hex.length >= 96
+    ? new Uint8Array(pcr0Hex.match(/.{1,2}/g)!.map((b) => parseInt(b, 16)))
+    : new Uint8Array(48).fill(0); // Zero hash — only valid if attestedComputeRequired=false
+  const tx = buildPay402Tx({
+    amountMist,
+    recipient: TREASURY_ID,
+    nonce: requestHash || crypto.randomUUID(),
+    nautilusAttestationHash: pcr0Bytes,
+  });
 
   try {
     const result = await suiClient.signAndExecuteTransaction({
@@ -190,10 +208,23 @@ async function decryptSentimentBlob(blobId: string, requestHash: string): Promis
       suiClient,
     });
     
+    // Build the PTB that proves we are allowed to decrypt
+    const sealTx = new Transaction();
+    sealTx.moveCall({
+      target: `${process.env.NEXT_PUBLIC_VELO402_SEAL_POLICY_PKG!}::knowledge_policy::seal_approve`,
+      arguments: [
+        sealTx.pure.string(requestHash), // id
+        sealTx.object(process.env.NEXT_PUBLIC_PAYMENT_REGISTRY_ID!), // registry
+      ],
+    });
+    // Set sender so it can be built
+    sealTx.setSender(agentKeypair.toSuiAddress());
+    const sealTxBytes = await sealTx.build({ client: suiClient });
+
     const decryptedBytes = await sealClient.decrypt({
       data: encryptedBytes,
       sessionKey,
-      txBytes: new Uint8Array(),
+      txBytes: sealTxBytes,
     });
 
     const json = JSON.parse(Buffer.from(decryptedBytes).toString('utf8')) as SentimentData;
@@ -251,19 +282,21 @@ async function executeTrade(decision: TradeDecision) {
   if (decision.orderType === 'spot') {
     tx = buildDeepbookSpotTx({
       amountMist: decision.amountMist,
-      deepbookBalanceManager: DEEPBOOK_POOL,
+      deepbookBalanceManager: DEEPBOOK_SPOT_POOL,
     });
   } else if (decision.orderType === 'margin') {
     tx = buildDeepbookAdvancedTx({
       amountMist: decision.amountMist,
-      scopeTag: 3, // SCOPE_DEEPBOOK_MARGIN
-      deepbookBalanceManager: DEEPBOOK_POOL,
+      scopeTag: 3,
+      deepbookMarginPoolId: DEEPBOOK_MARGIN_POOL,
+      deepbookPredictPoolId: DEEPBOOK_PREDICT_POOL,
     });
   } else {
     tx = buildDeepbookAdvancedTx({
       amountMist: decision.amountMist,
-      scopeTag: 4, // SCOPE_DEEPBOOK_PREDICT
-      deepbookBalanceManager: DEEPBOOK_POOL,
+      scopeTag: 4,
+      deepbookMarginPoolId: DEEPBOOK_MARGIN_POOL,
+      deepbookPredictPoolId: DEEPBOOK_PREDICT_POOL,
     });
   }
 

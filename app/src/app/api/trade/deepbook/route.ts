@@ -19,7 +19,16 @@ import { suiClient } from "@/lib/sui-client";
 import { getAgentKeypair } from "@/lib/agent-keypair";
 import { SCOPE } from "@/lib/velo-constants";
 
-const DEEPBOOK_POOL = process.env.NEXT_PUBLIC_DEEPBOOK_POOL_ID ?? "0x0";
+// Per-scope pool IDs from live DeepBook testnet indexer
+const DEEPBOOK_SPOT_POOL =
+  process.env.NEXT_PUBLIC_DEEPBOOK_SPOT_POOL_ID ??
+  "0x1c19362ca52b8ffd7a33cee805a67d40f31e6ba303753fd3a4cfdfacea7163a5";
+const DEEPBOOK_MARGIN_POOL =
+  process.env.NEXT_PUBLIC_DEEPBOOK_MARGIN_POOL_ID ??
+  "0x48c95963e9eac37a316b7ae04a0deb761bcdcc2b67912374d6036e7f0e9bae9f";
+const DEEPBOOK_PREDICT_POOL =
+  process.env.NEXT_PUBLIC_DEEPBOOK_PREDICT_POOL_ID ??
+  "0x8c1c1b186c4fddab1ebd53e0895a36c1d1b3b9a77cd34e607bef49a38af0150a";
 
 export async function POST(req: NextRequest) {
   try {
@@ -63,7 +72,7 @@ export async function POST(req: NextRequest) {
             action,
             amountMist,
             scopeTag,
-            intentKey: `${action}:${scopeTag}:${amountMist}`,
+            intentKey: `${action}:${scopeTag}:${amountMist}:${Date.now()}`,
           }),
         },
       );
@@ -83,20 +92,23 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // ── Build PTB ─────────────────────────────────────────────────────────────
+    // ── Build PTB — route to correct per-scope pool ───────────────────────────
     const keypair = getAgentKeypair();
     let tx;
 
     if (scopeTag === SCOPE.DEEPBOOK_SPOT) {
+      // SUI_DBUSDC — primary liquid spot pair
       tx = buildDeepbookSpotTx({
         amountMist: BigInt(amountMist),
-        deepbookBalanceManager: DEEPBOOK_POOL,
+        deepbookBalanceManager: DEEPBOOK_SPOT_POOL,
       });
     } else {
+      // DEEP_SUI (margin) or WAL_SUI (predict)
       tx = buildDeepbookAdvancedTx({
         amountMist: BigInt(amountMist),
         scopeTag,
-        deepbookBalanceManager: DEEPBOOK_POOL,
+        deepbookMarginPoolId: DEEPBOOK_MARGIN_POOL,
+        deepbookPredictPoolId: DEEPBOOK_PREDICT_POOL,
       });
     }
 

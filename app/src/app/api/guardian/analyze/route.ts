@@ -81,13 +81,42 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // ── Risk 4: High Slippage (Deepbook depth proxy) ──────────────────────────
-    // For testnet demo: simulate slippage based on order size relative to budget
-    const orderSizeRelative = amountMist / Number(policy.maxSpend);
-    if (orderSizeRelative > 0.3) {
-      warnings.push("HIGH_SLIPPAGE");
-      riskScore += 25;
-      details.estimated_slippage_bps = Math.round(orderSizeRelative * 500); // rough proxy
+    // ── Risk 4: High Slippage — Real Pyth Oracle price + confidence interval ────
+    // SUI/USD Pyth price feed ID (mainnet + testnet share same Hermes API)
+    const PYTH_SUI_USD_ID = "23d7315113f5b1d3ba7a83604c44b94d79f4fd69af77f804fc7f920a6dc65744";
+    const PYTH_URL = `https://hermes.pyth.network/v2/updates/price/latest?ids[]=${PYTH_SUI_USD_ID}`;
+    try {
+      const pythResp = await fetch(PYTH_URL);
+      const pythData = await pythResp.json();
+      const parsed = pythData?.parsed?.[0];
+      if (parsed) {
+        const publishTime = parsed.price.publish_time;
+        const ageSeconds = Math.floor(Date.now() / 1000) - publishTime;
+        const priceRaw = Number(parsed.price.price);
+        const confRaw  = Number(parsed.price.conf);
+        const expo     = parsed.price.expo;
+        const suiUsd   = priceRaw * Math.pow(10, expo);
+        const confUsd  = confRaw  * Math.pow(10, expo);
+        const slippageBps = Math.round((confUsd / suiUsd) * 10000);
+
+        details.pyth_sui_usd      = suiUsd.toFixed(6);
+        details.pyth_conf_usd     = confUsd.toFixed(6);
+        details.pyth_age_seconds  = ageSeconds;
+        details.estimated_slippage_bps = slippageBps;
+
+        // If oracle data itself is stale (> 60 seconds) — hard BLOCK
+        if (ageSeconds > 60) {
+          blocks.push("STALE_ORACLE");
+          riskScore += 40;
+          details.stale_oracle_reason = `Pyth price is ${ageSeconds}s old (max 60s)`;
+        } else if (slippageBps > 100) {
+          warnings.push("HIGH_SLIPPAGE");
+          riskScore += 25;
+        }
+      }
+    } catch (oracleErr) {
+      // Non-fatal — log but don't block
+      details.oracle_error = String(oracleErr);
     }
 
     // ── Risk 5: Stale Oracle (timestamp check) ────────────────────────────────
@@ -169,7 +198,7 @@ export async function POST(req: NextRequest) {
       );
     if (warnings.includes("HIGH_SLIPPAGE"))
       summaryParts.push(
-        `Order size is ${Math.round(orderSizeRelative * 100)}% of your total budget — expect significant price impact (~${details.estimated_slippage_bps} bps).`,
+        `High slippage detected: ~${details.estimated_slippage_bps} bps (SUI/USD: $${details.pyth_sui_usd ?? "N/A"}, conf: ±$${details.pyth_conf_usd ?? "N/A"}).`,
       );
     if (warnings.includes("DAILY_LIMIT_PROXIMITY"))
       summaryParts.push(

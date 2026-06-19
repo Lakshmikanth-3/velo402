@@ -49,6 +49,9 @@ export default function RootLayout({
               <Link href="/trading" className="nav-link">
                 Trading Desk
               </Link>
+              <Link href="/guardian" className="nav-link">
+                Guardian
+              </Link>
               <Link href="/kill-switch" className="nav-link kill-nav">
                 🔴 Kill Switch
               </Link>
