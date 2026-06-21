@@ -1,0 +1,15 @@
+{
+  "name": "@velo402/sdk",
+  "version": "1.0.0",
+  "description": "Velo402 Agent SDK for Sui",
+  "main": "index.ts",
+  "exports": {
+    ".": "./index.ts"
+  },
+  "dependencies": {
+    "@mysten/deepbook-v3": "^1.5.0",
+    "@mysten/seal": "^1.2.0",
+    "@mysten/sui": "^2.18.0",
+    "@mysten/walrus": "^1.2.0"
+  }
+}
