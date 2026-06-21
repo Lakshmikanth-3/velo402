@@ -4,6 +4,8 @@ import SidebarLayout from "@/components/SidebarLayout";
 import ConditionalLayout from "@/components/ConditionalLayout";
 import GlobalStatsTicker from "@/components/GlobalStatsTicker";
 
+import ShaderBackground from "@/components/ShaderBackground";
+
 export const metadata: Metadata = {
   title: "Velo402 — Autonomous Agent Wallet",
   description:
@@ -31,6 +33,7 @@ export default function RootLayout({
         />
       </head>
       <body>
+        <ShaderBackground />
         <ConditionalLayout>{children}</ConditionalLayout>
       </body>
     </html>
